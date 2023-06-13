@@ -19,7 +19,7 @@ def load_checkpoint(filepath, model, optimizer=None):
 def get_arg_parser():
     parser = argparse.ArgumentParser(description='Transformer Autoencoder for SpeechCommands Dataset')
     parser.add_argument('--data_path', type=str, default='./data', help='Path to the dataset')
-    parser.add_argument('--batch_size', type=int, default=32, help='Batch size for training')
+    parser.add_argument('--batch_size', type=int, default=128, help='Batch size for training')
     parser.add_argument('--epochs', type=int, default=100, help='Number of training epochs')
     parser.add_argument('--checkpoint_path', type=str, default='', help='Path to the checkpoint file')
     parser.add_argument('--use_cuda', action=argparse.BooleanOptionalAction, help='Use CUDA if available')
