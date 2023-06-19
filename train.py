@@ -14,28 +14,19 @@ def train_epoch(model, dataloader, optimizer, criterion, device):
     total_predictions = 0.0
     progress_bar = tqdm(dataloader, desc="Train", dynamic_ncols=True)
     for batch in progress_bar:
-        start_time = time.time()
 
         audio_values = batch["audio_values"].to(device)
         speaker_ids = batch["speaker_ids"].to(device)
-
-        data_loading_time = time.time() - start_time
-        # print(f"Data loading time: {data_loading_time}s")
         optimizer.zero_grad()
 
         # Your model forward pass
         outputs = model(audio_values)
-        forward_pass_time = time.time() - start_time
-        # print(f"Forward pass time: {forward_pass_time}s")
+
         # compute loss
         loss = criterion(outputs, speaker_ids)
-        loss_compute_time = time.time() - start_time
-        # print(f"Loss compute time: {loss_compute_time}s")
 
         loss.backward()
 
-        backward_pass_time = time.time() - start_time
-        # print(f"Backward pass time: {backward_pass_time}s")
         optimizer.step()
         running_loss += loss.item() * audio_values.size(0)
 
@@ -92,17 +83,19 @@ def main():
     print(f"Using device: {device}")
     device = torch.device(device)
 
-    train_dataloader, encoder = get_dataloader("train", batch_size=args.batch_size, n_mels=args.d_model)
+    train_dataloader, encoder = get_dataloader("train", batch_size=args.batch_size,
+                                               n_mels=args.d_model, lite=args.lite, feature_type=args.feature_type)
     num_classes = len(encoder.classes_)
 
     model = SpeakerIdentificationModel(args.d_model, args.nhead, args.num_layers, args.dim_feedforward, num_classes).to(device)
     criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters())
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     if args.checkpoint_path:
         load_checkpoint(args.checkpoint_path, model, optimizer)
 
-    val_dataloader, _ = get_dataloader("validation", batch_size=args.batch_size, n_mels=args.d_model)
+    val_dataloader, _ = get_dataloader("validation", batch_size=args.batch_size,
+                                       n_mels=args.d_model, lite=args.lite, feature_type=args.feature_type)
 
     for epoch in range(args.epochs):
         print(f'Epoch {epoch+1}')
