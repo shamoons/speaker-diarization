@@ -7,6 +7,7 @@ from torch.utils.data import DataLoader, ConcatDataset
 from datasets import load_dataset
 from sklearn.preprocessing import LabelEncoder
 import torchaudio
+from torch.utils.data import Subset
 from tqdm import tqdm
 
 
@@ -15,14 +16,25 @@ os.makedirs('data/voxceleb1', exist_ok=True)
 from torchaudio.datasets import VoxCeleb1Identification  # noqa: E402
 
 dataset_dict = {
-    'train': ConcatDataset([load_dataset("edinburghcstr/ami", "ihm", split='train', cache_dir="data/ami"),
-                            VoxCeleb1Identification(root='data/voxceleb1', subset='train', download=True)]),
-    'validation': ConcatDataset([load_dataset("edinburghcstr/ami", "ihm", split='validation', cache_dir="data/ami"),
-                                 VoxCeleb1Identification(root='data/voxceleb1', subset='dev', download=True)])
+    'train': ConcatDataset([
+        load_dataset("edinburghcstr/ami", "ihm", split='train', cache_dir="data/ami"),
+        VoxCeleb1Identification(root='data/voxceleb1', subset='train', download=True)
+    ]),
+    'validation': ConcatDataset([
+        load_dataset("edinburghcstr/ami", "ihm", split='validation', cache_dir="data/ami"),
+        VoxCeleb1Identification(root='data/voxceleb1', subset='dev', download=True)
+    ])
 }
 
 # File path to save/load the LabelEncoder
 encoder_filepath = "data/encoder.pkl"
+
+
+def get_speaker_ids(example):
+    if isinstance(example, tuple):
+        return str(example[3])
+    else:
+        return example.get('speaker_id', 'NO_SPEAKER')
 
 
 # Check if the encoder file exists
@@ -38,8 +50,9 @@ else:
     for split in dataset_dict.keys():
         # use 'NO_SPEAKER' if no speaker_id is provided
         dataset_split = dataset_dict[split]
-        all_speaker_ids.extend([str(example[2]) if isinstance(example, tuple) else example.get('speaker_id', 'NO_SPEAKER')
-                                for example in tqdm(dataset_split, desc=f'Processing {split} dataset')])
+        for example in tqdm(dataset_split, desc=f'Processing {split} dataset'):
+            speaker_id = get_speaker_ids(example)
+            all_speaker_ids.append(speaker_id)
 
     encoder.fit(all_speaker_ids)
 
@@ -52,14 +65,28 @@ else:
     print(f"Number of unique speaker IDs: {num_unique_speakers}")
 
 
+class CustomSubset(torch.utils.data.Subset):
+    def __init__(self, dataset, indices):
+        super().__init__(dataset, indices)
+
+    def __getitem__(self, idx):
+        data = self.dataset[self.indices[idx]]
+        if isinstance(data, dict):  # if data is a dictionary, use the key
+            return data['audio']['array'], data['speaker_id']
+        elif isinstance(data, tuple):  # if data is a tuple, use the indices
+            return data[0].flatten(), data[3]  # assuming the first element is 'audio' and the third element is 'speaker_id'
+        else:
+            raise ValueError('Data type not recognized. It should be either a dictionary or a tuple.')
+
+
 def get_dataloader(split, feature_type='melspectrogram', batch_size=4, n_mels=128,
                    max_duration=20, hop_duration=15, sample_rate=16000, lite=None):
     # Check feature type and create corresponding transform
     assert feature_type in ['melspectrogram', 'mfcc'], "Feature type must be either 'melspectrogram' or 'mfcc'"
     if feature_type == 'melspectrogram':
-        transform = torchaudio.transforms.MelSpectrogram(n_mels=n_mels)
+        transform = torchaudio.transforms.MelSpectrogram(n_mels=n_mels).to(torch.float32)
     else:
-        transform = torchaudio.transforms.MFCC(n_mfcc=n_mels)  # assuming n_mels is reused as n_mfcc
+        transform = torchaudio.transforms.MFCC(n_mfcc=n_mels).to(torch.float32)
 
     max_length_samples = int(max_duration * sample_rate)
     hop_length_samples = int(hop_duration * sample_rate)
@@ -68,39 +95,40 @@ def get_dataloader(split, feature_type='melspectrogram', batch_size=4, n_mels=12
 
     if lite is not None:
         if split == "train":
-            dataset = dataset.select(range(lite))
+            indices = list(range(lite))
+            dataset = CustomSubset(dataset, indices)
         elif split == "validation":
-            dataset = dataset.select(range(lite // 4))
+            indices = list(range(lite // 4))
+            dataset = CustomSubset(dataset, indices)
 
     def collate_fn(examples):
         audios = []
         speaker_ids = []
         for example in examples:
-            audio_tensor, sample_rate, speaker_id = example if isinstance(example, tuple) else (example["audio"]["array"].float(), sample_rate, example.get('speaker_id', 'NO_SPEAKER'))
-            audio_tensor = audio_tensor.float()
+            audio_data, speaker_id = example
+
             encoded_speaker_id = encoder.transform([str(speaker_id)])[0]
 
-            for start in range(0, max(1, len(audio_tensor) - max_length_samples + 1), hop_length_samples):
+            for start in range(0, max(1, len(audio_data) - max_length_samples + 1), hop_length_samples):
                 end = start + max_length_samples
-                segment = audio_tensor[start:end]
+                segment = audio_data[start:end]
                 # If the audio segment is shorter than max_duration, pad it
                 if len(segment) < max_length_samples:
+                    segment = torch.from_numpy(segment)  # convert segment to tensor
                     segment = torch.nn.functional.pad(segment, (0, max_length_samples - len(segment)))
                 audios.append(segment)
                 speaker_ids.append(encoded_speaker_id)  # Duplicate speaker_id for each segment
 
         # Convert audio list into tensor
+        audios = [audio.float() for audio in audios]
         audios = torch.stack(audios)
 
         # Apply transform (MelSpectrogram or MFCC) to audio
-        audios = transform(audios)
-        if feature_type == 'melspectrogram':
-            audios = audios.transpose(1, 2)
+        audios = transform(audios).transpose(1, 2)
 
         speaker_ids = torch.tensor(speaker_ids)
         return {"audio_values": audios, "speaker_ids": speaker_ids}
 
-    dataset.set_format(type="torch", columns=["audio", "speaker_id"])
     dataloader = DataLoader(dataset, collate_fn=collate_fn, shuffle=True, batch_size=batch_size)
 
     return dataloader, encoder

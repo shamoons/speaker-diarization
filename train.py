@@ -1,10 +1,12 @@
 # train.py
 import torch
 from tqdm import tqdm
-import time
+import wandb
 from dataset import get_dataloader
 from utils import get_arg_parser, save_checkpoint, load_checkpoint
 from model import SpeakerIdentificationModel
+
+torch.manual_seed(0)
 
 
 def train_epoch(model, dataloader, optimizer, criterion, device):
@@ -14,7 +16,6 @@ def train_epoch(model, dataloader, optimizer, criterion, device):
     total_predictions = 0.0
     progress_bar = tqdm(dataloader, desc="Train", dynamic_ncols=True)
     for batch in progress_bar:
-
         audio_values = batch["audio_values"].to(device)
         speaker_ids = batch["speaker_ids"].to(device)
         optimizer.zero_grad()
@@ -83,6 +84,10 @@ def main():
     print(f"Using device: {device}")
     device = torch.device(device)
 
+    # Initialize wandb
+    wandb_run = wandb.init(project="speech-inpainting", config=args.__dict__)
+    print("wandb dir:", wandb.run.dir)
+
     train_dataloader, encoder = get_dataloader("train", batch_size=args.batch_size,
                                                n_mels=args.d_model, lite=args.lite, feature_type=args.feature_type)
     num_classes = len(encoder.classes_)
@@ -105,6 +110,7 @@ def main():
               f'Train Accuracy: {train_accuracy:.3f}\t'
               f'Validation Loss: {val_loss:.3f}\t'
               f'Validation Accuracy: {val_accuracy:.3f}\n')
+        wandb_run.log({"train_loss": train_loss, "val_loss": val_loss, "train_accuracy": train_accuracy, "val_accuracy": val_accuracy})
 
         save_checkpoint({
             'epoch': epoch,
@@ -113,6 +119,9 @@ def main():
             'train_loss': train_loss,
             'val_loss': val_loss,
         }, 'checkpoint.pth')
+
+    # Finish the wandb run
+    wandb.finish()
 
 
 if __name__ == "__main__":
