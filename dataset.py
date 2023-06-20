@@ -32,7 +32,7 @@ encoder_filepath = "data/encoder.pkl"
 
 def get_speaker_ids(example):
     if isinstance(example, tuple):
-        return str(example[3])
+        return str(f"voxceleb1-{example[2]}")
     else:
         return example.get('speaker_id', 'NO_SPEAKER')
 
@@ -74,7 +74,7 @@ class CustomSubset(torch.utils.data.Subset):
         if isinstance(data, dict):  # if data is a dictionary, use the key
             return data['audio']['array'], data['speaker_id']
         elif isinstance(data, tuple):  # if data is a tuple, use the indices
-            return data[0].flatten(), data[3]  # assuming the first element is 'audio' and the third element is 'speaker_id'
+            return data[0].flatten(), str(f"voxceleb1-{data[2]}")
         else:
             raise ValueError('Data type not recognized. It should be either a dictionary or a tuple.')
 
@@ -110,7 +110,7 @@ def get_dataloader(split, feature_type='melspectrogram', batch_size=4, n_mels=12
                 speaker_id = example['speaker_id']
             elif isinstance(example, tuple):  # if data is a tuple, use the indices
                 audio_tensor = example[0].flatten()
-                speaker_id = example[3]
+                speaker_id = str(f"voxceleb1-{example[2]}")
 
             # Check if the audio_tensor is a numpy array and convert to tensor if needed
             if isinstance(audio_tensor, np.ndarray):
