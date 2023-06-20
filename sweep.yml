@@ -1,0 +1,27 @@
+program: train.py
+method: bayes
+metric:
+  name: val_loss
+  goal: minimize
+command:
+  - ${interpreter}
+  - ${program}
+  - ${args}
+  - --use_cuda
+parameters:
+  d_model:
+    values: [20, 40, 80, 160]
+  nhead:
+    value: [2, 4, 8]
+  num_layers:
+    value: [2, 4, 8]
+  epochs:
+    value: 10
+  dropout:
+    value: 0
+  batch_size:
+    values: [16, 32, 64, 128]
+  lr:
+    values: [0.001, 0.0001]
+  dim_feedforward:
+    values: [1024, 2048]

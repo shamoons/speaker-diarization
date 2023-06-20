@@ -8,6 +8,7 @@ from datasets import load_dataset
 from sklearn.preprocessing import LabelEncoder
 import torchaudio
 from tqdm import tqdm
+import numpy as np
 
 
 # Load all splits of the dataset
@@ -110,6 +111,10 @@ def get_dataloader(split, feature_type='melspectrogram', batch_size=4, n_mels=12
             elif isinstance(example, tuple):  # if data is a tuple, use the indices
                 audio_tensor = example[0].flatten()
                 speaker_id = example[3]
+
+            # Check if the audio_tensor is a numpy array and convert to tensor if needed
+            if isinstance(audio_tensor, np.ndarray):
+                audio_tensor = torch.from_numpy(audio_tensor)
 
             encoded_speaker_id = encoder.transform([str(speaker_id)])[0]
 
