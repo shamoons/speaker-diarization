@@ -7,7 +7,6 @@ from torch.utils.data import DataLoader, ConcatDataset
 from datasets import load_dataset
 from sklearn.preprocessing import LabelEncoder
 import torchaudio
-from torch.utils.data import Subset
 from tqdm import tqdm
 
 
@@ -105,16 +104,20 @@ def get_dataloader(split, feature_type='melspectrogram', batch_size=4, n_mels=12
         audios = []
         speaker_ids = []
         for example in examples:
-            audio_data, speaker_id = example
+            if isinstance(example, dict):  # if data is a dictionary, use the key
+                audio_tensor = example['audio']['array']
+                speaker_id = example['speaker_id']
+            elif isinstance(example, tuple):  # if data is a tuple, use the indices
+                audio_tensor = example[0].flatten()
+                speaker_id = example[3]
 
             encoded_speaker_id = encoder.transform([str(speaker_id)])[0]
 
-            for start in range(0, max(1, len(audio_data) - max_length_samples + 1), hop_length_samples):
+            for start in range(0, max(1, len(audio_tensor) - max_length_samples + 1), hop_length_samples):
                 end = start + max_length_samples
-                segment = audio_data[start:end]
+                segment = audio_tensor[start:end]
                 # If the audio segment is shorter than max_duration, pad it
                 if len(segment) < max_length_samples:
-                    segment = torch.from_numpy(segment)  # convert segment to tensor
                     segment = torch.nn.functional.pad(segment, (0, max_length_samples - len(segment)))
                 audios.append(segment)
                 speaker_ids.append(encoded_speaker_id)  # Duplicate speaker_id for each segment
