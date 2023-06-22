@@ -27,6 +27,7 @@ def get_arg_parser():
     parser.add_argument('--use_cuda', action=argparse.BooleanOptionalAction, help='Use CUDA if available')
     parser.add_argument('--use_mps', action=argparse.BooleanOptionalAction, help='Use MPS if available')
     parser.add_argument('--dropout', type=float, default=0, help='Dropout probability')
+    parser.add_argument('--warmup_steps', type=float, default=0.05, help='Percent of warmup steps')
 
     # Transformer configuration
     parser.add_argument('--d_model', type=int, default=40, help='Number of expected features in the input')

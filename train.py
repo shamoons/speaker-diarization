@@ -2,6 +2,7 @@
 import torch
 from tqdm import tqdm
 import wandb
+from torch.optim.lr_scheduler import LambdaLR
 from dataset import get_dataloader
 from utils import get_arg_parser, save_checkpoint, load_checkpoint
 from model import SpeakerIdentificationModel
@@ -96,6 +97,19 @@ def main():
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
+    warmup_steps = int(args.epochs * args.warmup_steps)  # % of total steps
+    print("Warmup steps:", warmup_steps)
+
+    def lr_lambda(step):
+        if step < warmup_steps:
+            return float(step) / float(max(1, warmup_steps))
+        return max(
+            args.lr * ((step - warmup_steps) ** -0.5),
+            args.lr * ((warmup_steps ** 0.5) * (step ** -0.5))
+        )
+
+    scheduler = LambdaLR(optimizer, lr_lambda=lr_lambda)
+
     if args.checkpoint_path:
         load_checkpoint(args.checkpoint_path, model, optimizer)
 
@@ -106,11 +120,21 @@ def main():
         print(f'Epoch {epoch+1}')
         train_loss, train_accuracy = train_epoch(model, train_dataloader, optimizer, criterion, device)
         val_loss, val_accuracy = validate_epoch(model, val_dataloader, criterion, device)
+
+        # Adjust learning rate
+        scheduler.step()
         print(f'Train Loss: {train_loss:.3f}\t'
               f'Train Accuracy: {train_accuracy:.3f}\t'
               f'Validation Loss: {val_loss:.3f}\t'
-              f'Validation Accuracy: {val_accuracy:.3f}\n')
-        wandb_run.log({"train_loss": train_loss, "val_loss": val_loss, "train_accuracy": train_accuracy, "val_accuracy": val_accuracy})
+              f'Validation Accuracy: {val_accuracy:.3f}\t'
+              f'Learning Rate: {scheduler.get_last_lr()[0]:.4e}\n')
+        wandb_run.log({
+            "train_loss": train_loss,
+            "val_loss": val_loss,
+            "train_accuracy": train_accuracy,
+            "val_accuracy": val_accuracy,
+            "learning_rate": scheduler.get_last_lr()[0]
+        })
 
         save_checkpoint({
             'epoch': epoch,
