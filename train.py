@@ -85,7 +85,7 @@ def main():
     device = torch.device(device)
 
     # Initialize wandb
-    wandb_run = wandb.init(project="speech-inpainting", config=args.__dict__)
+    wandb_run = wandb.init(project="speaker-diarization", config=args.__dict__)
     print("wandb dir:", wandb.run.dir)
 
     train_dataloader, encoder = get_dataloader("train", batch_size=args.batch_size,
