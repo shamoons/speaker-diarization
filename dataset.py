@@ -104,10 +104,18 @@ def get_dataloader(split, feature_type='melspectrogram', batch_size=4, n_mels=12
     def collate_fn(examples):
         audios = []
         speaker_ids = []
-        for audio_tensor, speaker_id in examples:
-            # Check if the audio_tensor is a numpy array and convert to tensor if needed
-            if isinstance(audio_tensor, np.ndarray):
+        for example in examples:
+            if len(example) == 4:
+                audio_tensor, _, speaker_id, _ = example
+                speaker_id = str(f"voxceleb1-{speaker_id}")
+                audio_tensor = audio_tensor.flatten()
+            elif isinstance(example, dict):
+                audio_tensor = example['audio']['array']
+                # Turn audio_tensor to torch tensor from numpy array
                 audio_tensor = torch.from_numpy(audio_tensor)
+                speaker_id = example['speaker_id']
+            else:
+                raise ValueError(f'Unexpected data type in example: {type(example)}. Expected tuple or dict.')
 
             encoded_speaker_id = encoder.transform([str(speaker_id)])[0]
 
