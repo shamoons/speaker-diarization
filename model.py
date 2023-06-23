@@ -1,17 +1,20 @@
 # model.py
 import torch
 from torch import nn
-import math
+
+from positional_encoding import PositionalEncoding
 
 
 class SpeakerIdentificationModel(nn.Module):
-    def __init__(self, d_model, nhead, num_layers, dim_feedforward, num_classes, input_size, dropout=0.1):
+    def __init__(self, d_model, nhead, num_layers, dim_feedforward, num_classes, n_time_steps, dropout=0.1):
         super(SpeakerIdentificationModel, self).__init__()
 
         self.d_model = d_model
+        self.n_time_steps = n_time_steps
 
-        # Input embedding
-        self.input_embedding = nn.Linear(input_size, d_model)
+        # Input embedding: Convert the input of shape (batch_size * new_sequence_length, n_time_steps * d_model)
+        # to (batch_size * new_sequence_length, d_model)
+        self.input_embedding = nn.Linear(n_time_steps * d_model, d_model)
 
         # Positional encoding
         self.pos_encoder = PositionalEncoding(d_model, dropout)
@@ -20,46 +23,57 @@ class SpeakerIdentificationModel(nn.Module):
         encoder_layers = nn.TransformerEncoderLayer(d_model, nhead, dim_feedforward, dropout=dropout)
         self.transformer_encoder = nn.TransformerEncoder(encoder_layers, num_layers)
 
-        # Classifier
+        # Dropout
+        self.dropout = nn.Dropout(dropout)
+
+        # Classifier: Convert the output of shape (batch_size, d_model) to (batch_size, num_classes)
         self.classifier = nn.Linear(d_model, num_classes)
 
-    def forward(self, src):
-        # Apply the input embedding
-        src = self.input_embedding(src)  # (batch_size, sequence_length, d_model)
+        # Softmax for the final output
+        self.softmax = nn.Softmax(dim=1)
 
-        src = src.transpose(0, 1)  # (sequence_length, batch_size, d_model)
+    def forward(self, src):
+        # src is a tensor of shape (batch_size, sequence_length, n_mels)
+        batch_size, sequence_length, n_mels = src.shape  # get the original shape
+
+        new_sequence_length = sequence_length // self.n_time_steps
+        src = src.unfold(1, self.n_time_steps, self.n_time_steps)  # unfold along the time axis
+
+        # Reshape src to 2D for the linear layer (flatten the last two dimensions)
+        # Now, src is of shape (batch_size * new_sequence_length, n_time_steps * d_model)
+        src = src.reshape(batch_size * new_sequence_length, -1)
+
+        # Apply the input embedding
+        # Now, src is of shape (batch_size * new_sequence_length, d_model)
+        src = self.input_embedding(src)
+
+        # Reshape back to 3D format
+        # Now, src is of shape (batch_size, new_sequence_length, d_model)
+        src = src.view(batch_size, new_sequence_length, self.d_model)
+
+        src = src.transpose(0, 1)  # (new_sequence_length, batch_size, d_model)
 
         # Add positional encoding to the input
-        src = self.pos_encoder(src)  # (sequence_length, batch_size, d_model)
+        # Now, src is of shape (new_sequence_length, batch_size, d_model)
+        src = self.pos_encoder(src)
 
         # Pass the input through the Transformer encoder
-        output = self.transformer_encoder(src)  # (sequence_length, batch_size, d_model)
+        # Now, output is of shape (new_sequence_length, batch_size, d_model)
+        output = self.transformer_encoder(src)
+
+        # Apply dropout
+        output = self.dropout(output)
 
         # Average pooling over the sequence dimension
-        output = output.mean(dim=0)  # (batch_size, d_model)
+        # Now, output is of shape (batch_size, d_model)
+        output = output.mean(dim=0)
 
         # Pass the output of the transformer through the classifier
-        output = self.classifier(output)  # (batch_size, num_classes)
+        # Now, output is of shape (batch_size, num_classes)
+        output = self.classifier(output)
+
+        # Apply softmax to the output
+        # Now, output is of shape (batch_size, num_classes)
+        output = self.softmax(output)
 
         return output
-
-
-class PositionalEncoding(nn.Module):
-    def __init__(self, d_model, dropout=0.1, max_len=5000):
-        super(PositionalEncoding, self).__init__()
-        self.dropout = nn.Dropout(p=dropout)
-
-        pe = torch.zeros(max_len, d_model)
-        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
-        pe[:, 0::2] = torch.sin(position * div_term)
-        pe[:, 1::2] = torch.cos(position * div_term)
-        pe = pe.unsqueeze(0).transpose(0, 1)
-        self.register_buffer('pe', pe)
-
-    def forward(self, x):
-        # x: tensor of shape (sequence_length, batch_size, d_model)
-
-        x = x + self.pe[:x.size(0), :]  # (sequence_length, batch_size, d_model)
-
-        return self.dropout(x)

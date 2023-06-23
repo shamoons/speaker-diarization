@@ -30,7 +30,7 @@ def get_arg_parser():
     parser.add_argument('--warmup_steps', type=float, default=0.05, help='Percent of warmup steps')
 
     # Transformer configuration
-    parser.add_argument('--d_model', type=int, default=40, help='Number of expected features in the input')
+    parser.add_argument('--d_model', type=int, default=64, help='Number of expected features in the input')
     parser.add_argument('--nhead', type=int, default=2, help='Number of heads in the multihead attention models')
     parser.add_argument('--num_layers', type=int, default=2, help='Number of sub-encoder-layers in the transformer encoder')
     parser.add_argument('--dim_feedforward', type=int, default=1024, help='Dimension of the feedforward network model')

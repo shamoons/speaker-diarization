@@ -33,10 +33,9 @@ def main():
                                                n_mels=args.d_model, lite=args.lite)
     num_classes = len(encoder.classes_)
 
-    input_size = args.d_model * args.n_time_steps  # Calculate input size
-
     model = SpeakerIdentificationModel(args.d_model, args.nhead, args.num_layers,
-                                       args.dim_feedforward, num_classes, input_size, dropout=args.dropout).to(device)
+                                       args.dim_feedforward, num_classes, n_time_steps=args.n_time_steps,
+                                       dropout=args.dropout).to(device)
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 

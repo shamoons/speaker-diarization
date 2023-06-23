@@ -77,7 +77,7 @@ class CustomSubset(torch.utils.data.Subset):
             raise ValueError('Data type not recognized. It should be either a dictionary or a tuple.')
 
 
-def get_dataloader(split, batch_size=4, n_mels=128, n_time_steps=10,
+def get_dataloader(split, batch_size=4, n_mels=128,
                    max_duration=20, hop_duration=15, sample_rate=16000, lite=None):
     # Create MelSpectrogram transform
     transform = torchaudio.transforms.MelSpectrogram(n_mels=n_mels).to(torch.float32)
@@ -131,18 +131,6 @@ def get_dataloader(split, batch_size=4, n_mels=128, n_time_steps=10,
 
         # Apply MelSpectrogram transform to audio
         audios = transform(audios).transpose(1, 2)  # shape: [batch_size, sequence_length, n_mels]
-
-        remainder = audios.shape[1] % n_time_steps
-        if remainder != 0:
-            padding = n_time_steps - remainder
-            audios = torch.nn.functional.pad(audios, (0, 0, 0, padding))
-
-        # Create patches of size [n_time_steps, n_mels]
-        audios = audios.unfold(1, n_time_steps, n_time_steps)
-        # Flatten patches
-        audios = audios.reshape(audios.shape[0], audios.shape[1], -1)
-
-        # Shape of audios after creating patches: [batch_size, num_patches, n_time_steps*n_mels]
 
         speaker_ids = torch.tensor(speaker_ids)
         return {"audio_values": audios, "speaker_ids": speaker_ids}
