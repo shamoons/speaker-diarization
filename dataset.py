@@ -101,7 +101,9 @@ def get_dataloader(split, batch_size=4, n_mels=128,
         for example in examples:
             if len(example) == 2:
                 audio_tensor, speaker_id = example
-                audio_tensor = torch.from_numpy(audio_tensor)
+                if not torch.is_tensor(audio_tensor):
+                    audio_tensor = torch.from_numpy(audio_tensor)
+
             elif len(example) == 4:
                 audio_tensor, _, speaker_id, _ = example
                 speaker_id = str(f"voxceleb1-{speaker_id}")
