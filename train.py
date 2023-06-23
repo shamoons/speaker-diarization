@@ -1,5 +1,6 @@
 # train.py
 import torch
+import time
 from tqdm import tqdm
 import wandb
 from torch.optim.lr_scheduler import LambdaLR
@@ -101,12 +102,10 @@ def main():
     print("Warmup steps:", warmup_steps)
 
     def lr_lambda(step):
-        if step < warmup_steps:
-            return float(step) / float(max(1, warmup_steps))
-        return max(
-            args.lr * ((step - warmup_steps) ** -0.5),
-            args.lr * ((warmup_steps ** 0.5) * (step ** -0.5))
-        )
+
+        lr = args.lr * min((step + 1)
+                           ** -0.5, (step + 1) * warmup_steps ** -1.5)
+        return lr
 
     scheduler = LambdaLR(optimizer, lr_lambda=lr_lambda)
 
@@ -117,17 +116,24 @@ def main():
                                        n_mels=args.d_model, lite=args.lite, feature_type=args.feature_type)
 
     for epoch in range(args.epochs):
+        start_time = time.time()
         print(f'Epoch {epoch+1}')
         train_loss, train_accuracy = train_epoch(model, train_dataloader, optimizer, criterion, device)
         val_loss, val_accuracy = validate_epoch(model, val_dataloader, criterion, device)
 
         # Adjust learning rate
         scheduler.step()
+
+        end_time = time.time()
+        epoch_time = end_time - start_time
+
         print(f'Train Loss: {train_loss:.3f}\t'
               f'Train Accuracy: {train_accuracy:.3f}\t'
               f'Validation Loss: {val_loss:.3f}\t'
               f'Validation Accuracy: {val_accuracy:.3f}\t'
-              f'Learning Rate: {scheduler.get_last_lr()[0]:.4e}\n')
+              f'Learning Rate: {scheduler.get_last_lr()[0]:.4e}\t'
+              f'Epoch Time: {epoch_time:.2f} seconds\n')
+
         wandb_run.log({
             "train_loss": train_loss,
             "val_loss": val_loss,

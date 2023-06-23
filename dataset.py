@@ -105,7 +105,10 @@ def get_dataloader(split, feature_type='melspectrogram', batch_size=4, n_mels=12
         audios = []
         speaker_ids = []
         for example in examples:
-            if len(example) == 4:
+            if len(example) == 2:
+                audio_tensor, speaker_id = example
+                audio_tensor = torch.from_numpy(audio_tensor)
+            elif len(example) == 4:
                 audio_tensor, _, speaker_id, _ = example
                 speaker_id = str(f"voxceleb1-{speaker_id}")
                 audio_tensor = audio_tensor.flatten()
