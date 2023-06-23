@@ -22,7 +22,7 @@ parameters:
   batch_size:
     values: [32, 128]
   lr:
-    values: [0.1, 0.001]
+    values: [0.01, 0.0001]
   dim_feedforward:
     values: [512, 2048]
   warmup_steps:
