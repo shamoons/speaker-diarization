@@ -30,4 +30,4 @@ parameters:
   n_time_steps:
     values: [1, 10]
   lite:
-    value: 40000
+    value: 20000
