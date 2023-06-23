@@ -1,76 +1,15 @@
 # train.py
 import torch
 import time
-from tqdm import tqdm
 import wandb
 from torch.optim.lr_scheduler import LambdaLR
 from dataset import get_dataloader
 from utils import get_arg_parser, save_checkpoint, load_checkpoint
 from model import SpeakerIdentificationModel
+from epoch import train_epoch, validate_epoch
+
 
 torch.manual_seed(0)
-
-
-def train_epoch(model, dataloader, optimizer, criterion, device):
-    model.train()
-    running_loss = 0.0
-    correct_predictions = 0.0
-    total_predictions = 0.0
-    progress_bar = tqdm(dataloader, desc="Train", dynamic_ncols=True)
-    for batch in progress_bar:
-        audio_values = batch["audio_values"].to(device)
-        speaker_ids = batch["speaker_ids"].to(device)
-        optimizer.zero_grad()
-
-        # Your model forward pass
-        outputs = model(audio_values)
-
-        # compute loss
-        loss = criterion(outputs, speaker_ids)
-
-        loss.backward()
-
-        optimizer.step()
-        running_loss += loss.item() * audio_values.size(0)
-
-        # Compute accuracy
-        _, predicted = torch.max(outputs, 1)
-        total_predictions += speaker_ids.size(0)
-        correct_predictions += (predicted == speaker_ids).sum().item()
-
-        progress_bar.set_postfix({'loss': '{:.3f}'.format(loss.item() / len(batch))})
-
-    epoch_loss = running_loss / len(dataloader.dataset)
-    accuracy = correct_predictions / total_predictions
-    return epoch_loss, accuracy
-
-
-def validate_epoch(model, dataloader, criterion, device):
-    model.eval()
-    running_loss = 0.0
-    correct_predictions = 0.0
-    total_predictions = 0.0
-    progress_bar = tqdm(dataloader, desc="Validate", dynamic_ncols=True)
-    with torch.no_grad():
-        for batch in progress_bar:
-            audio_values = batch["audio_values"].to(device)
-            speaker_ids = batch["speaker_ids"].to(device)
-            # Your model forward pass
-            outputs = model(audio_values)
-            # compute loss
-            loss = criterion(outputs, speaker_ids)
-            running_loss += loss.item() * audio_values.size(0)
-
-            # Compute accuracy
-            _, predicted = torch.max(outputs, 1)
-            total_predictions += speaker_ids.size(0)
-            correct_predictions += (predicted == speaker_ids).sum().item()
-
-            progress_bar.set_postfix({'loss': '{:.3f}'.format(loss.item() / len(batch))})
-
-    epoch_loss = running_loss / len(dataloader.dataset)
-    accuracy = correct_predictions / total_predictions
-    return epoch_loss, accuracy
 
 
 def main():
@@ -91,10 +30,13 @@ def main():
     print("wandb dir:", wandb.run.dir)
 
     train_dataloader, encoder = get_dataloader("train", batch_size=args.batch_size,
-                                               n_mels=args.d_model, lite=args.lite, feature_type=args.feature_type)
+                                               n_mels=args.d_model, lite=args.lite)
     num_classes = len(encoder.classes_)
 
-    model = SpeakerIdentificationModel(args.d_model, args.nhead, args.num_layers, args.dim_feedforward, num_classes).to(device)
+    input_size = args.d_model * args.n_time_steps  # Calculate input size
+
+    model = SpeakerIdentificationModel(args.d_model, args.nhead, args.num_layers,
+                                       args.dim_feedforward, num_classes, input_size, dropout=args.dropout).to(device)
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
@@ -113,7 +55,7 @@ def main():
         load_checkpoint(args.checkpoint_path, model, optimizer)
 
     val_dataloader, _ = get_dataloader("validation", batch_size=args.batch_size,
-                                       n_mels=args.d_model, lite=args.lite, feature_type=args.feature_type)
+                                       n_mels=args.d_model, lite=args.lite)
 
     for epoch in range(args.epochs):
         start_time = time.time()

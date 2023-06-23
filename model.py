@@ -5,22 +5,28 @@ import math
 
 
 class SpeakerIdentificationModel(nn.Module):
-    def __init__(self, d_model, nhead, num_layers, dim_feedforward, num_classes):
+    def __init__(self, d_model, nhead, num_layers, dim_feedforward, num_classes, input_size, dropout=0.1):
         super(SpeakerIdentificationModel, self).__init__()
 
         self.d_model = d_model
 
+        # Input embedding
+        self.input_embedding = nn.Linear(input_size, d_model)
+
         # Positional encoding
-        self.pos_encoder = PositionalEncoding(d_model)
+        self.pos_encoder = PositionalEncoding(d_model, dropout)
 
         # Transformer Encoder
-        encoder_layers = nn.TransformerEncoderLayer(d_model, nhead, dim_feedforward)
+        encoder_layers = nn.TransformerEncoderLayer(d_model, nhead, dim_feedforward, dropout=dropout)
         self.transformer_encoder = nn.TransformerEncoder(encoder_layers, num_layers)
 
         # Classifier
         self.classifier = nn.Linear(d_model, num_classes)
 
     def forward(self, src):
+        # Apply the input embedding
+        src = self.input_embedding(src)  # (batch_size, sequence_length, d_model)
+
         src = src.transpose(0, 1)  # (sequence_length, batch_size, d_model)
 
         # Add positional encoding to the input

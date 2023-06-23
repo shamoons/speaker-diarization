@@ -8,12 +8,10 @@ from datasets import load_dataset
 from sklearn.preprocessing import LabelEncoder
 import torchaudio
 from tqdm import tqdm
-import numpy as np
-
 
 # Load all splits of the dataset
 os.makedirs('data/voxceleb1', exist_ok=True)
-from torchaudio.datasets import VoxCeleb1Identification  # noqa: E402
+from torchaudio.datasets import VoxCeleb1Identification  # noqa E402
 
 dataset_dict = {
     'train': ConcatDataset([
@@ -79,14 +77,10 @@ class CustomSubset(torch.utils.data.Subset):
             raise ValueError('Data type not recognized. It should be either a dictionary or a tuple.')
 
 
-def get_dataloader(split, feature_type='melspectrogram', batch_size=4, n_mels=128,
+def get_dataloader(split, batch_size=4, n_mels=128, n_time_steps=10,
                    max_duration=20, hop_duration=15, sample_rate=16000, lite=None):
-    # Check feature type and create corresponding transform
-    assert feature_type in ['melspectrogram', 'mfcc'], "Feature type must be either 'melspectrogram' or 'mfcc'"
-    if feature_type == 'melspectrogram':
-        transform = torchaudio.transforms.MelSpectrogram(n_mels=n_mels).to(torch.float32)
-    else:
-        transform = torchaudio.transforms.MFCC(n_mfcc=n_mels).to(torch.float32)
+    # Create MelSpectrogram transform
+    transform = torchaudio.transforms.MelSpectrogram(n_mels=n_mels).to(torch.float32)
 
     max_length_samples = int(max_duration * sample_rate)
     hop_length_samples = int(hop_duration * sample_rate)
@@ -135,8 +129,20 @@ def get_dataloader(split, feature_type='melspectrogram', batch_size=4, n_mels=12
         audios = [audio.float() for audio in audios]
         audios = torch.stack(audios)
 
-        # Apply transform (MelSpectrogram or MFCC) to audio
-        audios = transform(audios).transpose(1, 2)
+        # Apply MelSpectrogram transform to audio
+        audios = transform(audios).transpose(1, 2)  # shape: [batch_size, sequence_length, n_mels]
+
+        remainder = audios.shape[1] % n_time_steps
+        if remainder != 0:
+            padding = n_time_steps - remainder
+            audios = torch.nn.functional.pad(audios, (0, 0, 0, padding))
+
+        # Create patches of size [n_time_steps, n_mels]
+        audios = audios.unfold(1, n_time_steps, n_time_steps)
+        # Flatten patches
+        audios = audios.reshape(audios.shape[0], audios.shape[1], -1)
+
+        # Shape of audios after creating patches: [batch_size, num_patches, n_time_steps*n_mels]
 
         speaker_ids = torch.tensor(speaker_ids)
         return {"audio_values": audios, "speaker_ids": speaker_ids}

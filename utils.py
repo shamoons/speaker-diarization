@@ -36,7 +36,6 @@ def get_arg_parser():
     parser.add_argument('--dim_feedforward', type=int, default=1024, help='Dimension of the feedforward network model')
 
     # Data configuration
-    parser.add_argument('--feature_type', type=str, default='melspectrogram',
-                        choices=['melspectrogram', 'mfcc'], help='Feature type to use: "melspectrogram" or "mfcc"')
+    parser.add_argument('--n_time_steps', type=int, default=10, help='Number of time steps in the input')
 
     return parser
