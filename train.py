@@ -56,6 +56,9 @@ def main():
     val_dataloader, _ = get_dataloader("validation", batch_size=args.batch_size,
                                        n_mels=args.d_model, lite=args.lite)
 
+    print(f"Training on {len(train_dataloader.dataset)} samples")
+    print(f"Validating on {len(val_dataloader.dataset)} samples")
+
     for epoch in range(args.epochs):
         start_time = time.time()
         print(f'Epoch {epoch+1}')
