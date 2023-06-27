@@ -10,24 +10,24 @@ command:
   - --use_cuda
 parameters:
   d_model:
-    values: [16,128]
+    values: [16, 128]
   nhead:
-    values: [2, 8]
+    values: 4
   num_layers:
-    values: [2, 8]
+    value: 4
   epochs:
-    value: 150
+    value: 200
   dropout:
     value: 0
   batch_size:
     value: 64
   lr:
-    values: [0.01, 0.0001]
+    values: [0.05, 0.001]
   dim_feedforward:
     value: 512
   warmup_steps:
     value: 0.05
   n_time_steps:
-    values: [10, 20]
+    values: [1, 50]
   lite:
-    value: 60000
+    value: 120000
