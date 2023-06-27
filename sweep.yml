@@ -12,7 +12,7 @@ parameters:
   d_model:
     values: [16, 128]
   nhead:
-    values: 4
+    value: 4
   num_layers:
     value: 4
   epochs:

@@ -92,7 +92,8 @@ def get_dataloader(split, batch_size=4, n_mels=128,
             indices = list(range(lite))
             dataset = CustomSubset(dataset, indices)
         elif split == "validation":
-            indices = list(range(lite // 4))
+            subset_size = min(lite // 4, len(dataset))
+            indices = list(range(subset_size))
             dataset = CustomSubset(dataset, indices)
 
     def collate_fn(examples):
