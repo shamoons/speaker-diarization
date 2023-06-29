@@ -109,6 +109,10 @@ def get_dataloader(split, batch_size=4, n_mels=128,
                 audio_tensor, _, speaker_id, _ = example
                 speaker_id = str(f"voxceleb1-{speaker_id}")
                 audio_tensor = audio_tensor.flatten()
+            elif len(example) == 6:
+                audio_tensor, _, _, speaker_id, _, _ = example
+                speaker_id = str(f"librispeech-{speaker_id}")
+                audio_tensor = audio_tensor.flatten()
             elif isinstance(example, dict):
                 audio_tensor = example['audio']['array']
                 # Turn audio_tensor to torch tensor from numpy array
