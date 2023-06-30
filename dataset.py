@@ -21,11 +21,14 @@ if os.path.isfile(encoder_filepath):
         encoder = pickle.load(f)
 else:
     # If encoder file does not exist, prepare it from the dataset.
-    speaker_ids = [os.path.basename(os.path.dirname(f)) for f in glob.glob(f"{audio_path}/*/*")]
+    speaker_ids = [os.path.basename(f.rstrip(os.sep)) for f in glob.glob(f"{audio_path}/*/*/")]
     encoder.fit(speaker_ids)
     # Save the fitted encoder for future use
     with open(encoder_filepath, "wb") as f:
         pickle.dump(encoder, f)
+
+# Print the number of unique speakers
+print("Number of unique speakers:", len(encoder.classes_))
 
 
 class AudioDataset(Dataset):
