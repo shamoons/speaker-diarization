@@ -6,6 +6,9 @@ from datasets import load_dataset
 from torchaudio.datasets import LIBRISPEECH, VoxCeleb1Identification
 from tqdm import tqdm
 
+os.makedirs("data/LIBRISPEECH", exist_ok=True)
+os.makedirs("data/voxceleb1", exist_ok=True)
+
 dataset_dict = {
     'train': [
         load_dataset("edinburghcstr/ami", "ihm", split='train', cache_dir="data/ami"),
