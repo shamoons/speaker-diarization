@@ -1,5 +1,4 @@
 # model.py
-import torch
 from torch import nn
 
 from positional_encoding import PositionalEncoding
@@ -71,9 +70,5 @@ class SpeakerIdentificationModel(nn.Module):
         # Pass the output of the transformer through the classifier
         # Now, output is of shape (batch_size, num_classes)
         output = self.classifier(output)
-
-        # Apply softmax to the output
-        # Now, output is of shape (batch_size, num_classes)
-        output = self.softmax(output)
 
         return output

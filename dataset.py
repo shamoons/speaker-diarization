@@ -1,39 +1,18 @@
 # dataset.py
 import os
 import pickle
+import glob
 
 import torch
-from torch.utils.data import DataLoader, ConcatDataset
-from datasets import load_dataset
+from torch.utils.data import DataLoader, Dataset
 from sklearn.preprocessing import LabelEncoder
 import torchaudio
-from tqdm import tqdm
-
-# Load all splits of the dataset
-os.makedirs('data/voxceleb1', exist_ok=True)
-from torchaudio.datasets import VoxCeleb1Identification  # noqa E402
-
-dataset_dict = {
-    'train': ConcatDataset([
-        load_dataset("edinburghcstr/ami", "ihm", split='train', cache_dir="data/ami"),
-        VoxCeleb1Identification(root='data/voxceleb1', subset='train', download=True)
-    ]),
-    'validation': ConcatDataset([
-        load_dataset("edinburghcstr/ami", "ihm", split='validation', cache_dir="data/ami"),
-        VoxCeleb1Identification(root='data/voxceleb1', subset='dev', download=True)
-    ])
-}
 
 # File path to save/load the LabelEncoder
 encoder_filepath = "data/encoder.pkl"
+audio_path = "data/audio"
 
-
-def get_speaker_ids(example):
-    if isinstance(example, tuple):
-        return str(f"voxceleb1-{example[2]}")
-    else:
-        return example.get('speaker_id', 'NO_SPEAKER')
-
+encoder = LabelEncoder()
 
 # Check if the encoder file exists
 if os.path.isfile(encoder_filepath):
@@ -41,99 +20,64 @@ if os.path.isfile(encoder_filepath):
     with open(encoder_filepath, "rb") as f:
         encoder = pickle.load(f)
 else:
-    # Create and fit a LabelEncoder to all the speaker_ids in all splits of the dataset
-    encoder = LabelEncoder()
-    all_speaker_ids = []
-    print("Starting to fit the LabelEncoder...")
-    for split in dataset_dict.keys():
-        # use 'NO_SPEAKER' if no speaker_id is provided
-        dataset_split = dataset_dict[split]
-        for example in tqdm(dataset_split, desc=f'Processing {split} dataset'):
-            speaker_id = get_speaker_ids(example)
-            all_speaker_ids.append(speaker_id)
-
-    encoder.fit(all_speaker_ids)
-
-    # Save the encoder to file
+    # If encoder file does not exist, prepare it from the dataset.
+    speaker_ids = [os.path.basename(os.path.dirname(f)) for f in glob.glob(f"{audio_path}/*/*")]
+    encoder.fit(speaker_ids)
+    # Save the fitted encoder for future use
     with open(encoder_filepath, "wb") as f:
         pickle.dump(encoder, f)
 
-    # Print the number of unique speaker_ids
-    num_unique_speakers = len(set(all_speaker_ids))
-    print(f"Number of unique speaker IDs: {num_unique_speakers}")
 
+class AudioDataset(Dataset):
+    def __init__(self, audio_dir, lite=None):
+        self.audio_dir = audio_dir
+        self.audio_files = []
+        self.speaker_ids = []
+        for speaker_id in os.listdir(audio_dir):
+            speaker_dir = os.path.join(audio_dir, speaker_id)
+            if os.path.isdir(speaker_dir):
+                for filename in os.listdir(speaker_dir):
+                    if filename.endswith('.wav'):
+                        self.audio_files.append(os.path.join(speaker_dir, filename))
+                        self.speaker_ids.append(speaker_id)
 
-class CustomSubset(torch.utils.data.Subset):
-    def __init__(self, dataset, indices):
-        super().__init__(dataset, indices)
+        if lite is not None:
+            self.audio_files = self.audio_files[:lite]
+            self.speaker_ids = self.speaker_ids[:lite]
+
+    def __len__(self):
+        return len(self.audio_files)
 
     def __getitem__(self, idx):
-        data = self.dataset[self.indices[idx]]
-        if isinstance(data, dict):  # if data is a dictionary, use the key
-            return data['audio']['array'], data['speaker_id']
-        elif isinstance(data, tuple):  # if data is a tuple, use the indices
-            return data[0].flatten(), str(f"voxceleb1-{data[2]}")
-        else:
-            raise ValueError('Data type not recognized. It should be either a dictionary or a tuple.')
+        audio_file = self.audio_files[idx]
+        waveform, sample_rate = torchaudio.load(audio_file)
+        return waveform, self.speaker_ids[idx]
 
 
-def get_dataloader(split, batch_size=4, n_mels=128,
-                   max_duration=20, hop_duration=15, sample_rate=16000, lite=None):
+def get_dataloader(split, batch_size=4, n_mels=128, lite=None):
     # Create MelSpectrogram transform
     transform = torchaudio.transforms.MelSpectrogram(n_mels=n_mels).to(torch.float32)
 
-    max_length_samples = int(max_duration * sample_rate)
-    hop_length_samples = int(hop_duration * sample_rate)
+    split_audio_path = os.path.join(audio_path, split)
 
-    dataset = dataset_dict[split]
+    # If lite is defined and the split is for validation, divide the lite number by 4
+    if lite is not None and split == 'validation':
+        lite = max(lite // 4, 1)
 
-    if lite is not None:
-        if split == "train":
-            indices = list(range(lite))
-            dataset = CustomSubset(dataset, indices)
-        elif split == "validation":
-            subset_size = min(lite // 4, len(dataset))
-            indices = list(range(subset_size))
-            dataset = CustomSubset(dataset, indices)
+    dataset = AudioDataset(split_audio_path, lite)
 
     def collate_fn(examples):
         audios = []
         speaker_ids = []
         for example in examples:
-            if len(example) == 2:
-                audio_tensor, speaker_id = example
-                if not torch.is_tensor(audio_tensor):
-                    audio_tensor = torch.from_numpy(audio_tensor)
-
-            elif len(example) == 4:
-                audio_tensor, _, speaker_id, _ = example
-                speaker_id = str(f"voxceleb1-{speaker_id}")
-                audio_tensor = audio_tensor.flatten()
-            elif len(example) == 6:
-                audio_tensor, _, _, speaker_id, _, _ = example
-                speaker_id = str(f"librispeech-{speaker_id}")
-                audio_tensor = audio_tensor.flatten()
-            elif isinstance(example, dict):
-                audio_tensor = example['audio']['array']
-                # Turn audio_tensor to torch tensor from numpy array
-                audio_tensor = torch.from_numpy(audio_tensor)
-                speaker_id = example['speaker_id']
-            else:
-                raise ValueError(f'Unexpected data type in example: {type(example)}. Expected tuple or dict.')
-
+            audio_tensor, speaker_id = example
+            if audio_tensor.dim() > 1:
+                audio_tensor = audio_tensor[0]
             encoded_speaker_id = encoder.transform([str(speaker_id)])[0]
-
-            for start in range(0, max(1, len(audio_tensor) - max_length_samples + 1), hop_length_samples):
-                end = start + max_length_samples
-                segment = audio_tensor[start:end]
-                # If the audio segment is shorter than max_duration, pad it
-                if len(segment) < max_length_samples:
-                    segment = torch.nn.functional.pad(segment, (0, max_length_samples - len(segment)))
-                audios.append(segment)
-                speaker_ids.append(encoded_speaker_id)  # Duplicate speaker_id for each segment
+            audios.append(audio_tensor)
+            speaker_ids.append(encoded_speaker_id)
 
         # Convert audio list into tensor
-        audios = [audio.float() for audio in audios]
         audios = torch.stack(audios)
 
         # Apply MelSpectrogram transform to audio
