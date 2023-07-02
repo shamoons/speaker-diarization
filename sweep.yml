@@ -12,20 +12,20 @@ parameters:
   d_model:
     values: [16, 64]
   nhead:
-    values: [2, 8]
+    values: [2, 4]
   num_layers:
     values: [2, 8]
   epochs:
-    value: 50
+    value: 100
   dropout:
     values: [0, 0.1]
   batch_size:
-    value: 64
+    value: 128
   lr:
     values: [0.01, 0.001]
   dim_feedforward:
-    value: [512, 2048]
+    values: [512, 2048]
   warmup_steps:
     value: 0.05
   n_time_steps:
-    values: [10, 100]
+    values: [60, 120]
